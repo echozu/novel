@@ -1,0 +1,65 @@
+id: xuanhuan
+name: 玄幻 / 仙侠 / 修真 / 奇幻
+description: |
+  以修炼/升级体系为骨架的爆款题材，核心爽点在于"等级突破""装逼打脸""扫六合"。
+keywords:
+  - 修炼
+  - 灵气
+  - 境界
+  - 突破
+  - 仙人
+  - 法宝
+  - 丹药
+  - 宗门
+
+# 核心套路库 — Map 阶段做 trope 命中时只能从这里选
+tropes:
+  - id: cheat_system
+    name: 金手指/系统
+    desc: 主角拥有别人没有的开挂物（系统/血脉/前世记忆/独门功法）
+  - id: power_up_breakthrough
+    name: 等级突破
+    desc: 突破一个境界节点（炼气→筑基→金丹...），通常是阶段大爽点
+  - id: face_slap
+    name: 装逼打脸
+    desc: 被人轻视/羞辱后强势反击，前者跪舔/瞠目结舌
+  - id: harem_progress
+    name: 后宫推进
+    desc: 一名女性角色从陌生→好感→倾心的某一步
+  - id: sect_war
+    name: 宗门/势力大战
+    desc: 大规模势力冲突，多方下场
+  - id: hidden_old_monster
+    name: 隐藏的老怪物
+    desc: 看似普通的人/物身份揭晓，实力远超众人
+  - id: alchemy_artifact
+    name: 炼丹/炼器
+    desc: 主角制作丹药/法宝并展示天赋
+  - id: secret_realm
+    name: 秘境探索
+    desc: 进入封闭空间寻宝/历练
+  - id: bloodline_awakening
+    name: 血脉觉醒
+    desc: 隐藏血脉/天赋觉醒，实力质变
+  - id: revenge_arc
+    name: 复仇线
+    desc: 杀父灭门、被抛弃等仇恨的回收
+  - id: dao_companion
+    name: 道侣/双修
+    desc: CP 进展中带"双修助境界"等修真特色设定
+  - id: heaven_punishment
+    name: 天劫/天罚
+    desc: 突破或逆天行事招致天劫
+  - id: master_sect_recruit
+    name: 大佬招徒
+    desc: 隐世高人主动收主角为徒
+  - id: lottery_treasure
+    name: 抽奖/开盲盒
+    desc: 抽奖系统/盲盒机制带来即时反馈
+
+# 必避雷区（在 Layer3 弃书风险分析时优先关注的反面模板）
+anti_patterns:
+  - 主角连吃多章瘪未反弹
+  - 大段世界观/功法设定堆砌
+  - 升级失去节制（万年回报感）
+  - 反派降智专为主角发挥

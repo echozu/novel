@@ -1,0 +1,60 @@
+id: dushi
+name: 都市 / 重生 / 商战 / 娱乐圈
+description: |
+  以现代都市为背景，强调"重生""逆袭""扫脸 + 装逼"，节奏极快、爽点密。
+keywords:
+  - 重生
+  - 装逼
+  - 打脸
+  - 系统
+  - 都市
+  - 商战
+  - 娱乐圈
+  - 老板
+
+tropes:
+  - id: rebirth_pre_knowledge
+    name: 重生先知
+    desc: 主角带着前世记忆 / 信息差作弊
+  - id: face_slap_show_off
+    name: 装弱诱敌·打脸
+    desc: 被人看不起后亮出真实身份 / 实力，一击秒杀
+  - id: system_reward
+    name: 任务系统奖励
+    desc: 完成任务获得即时反馈（金钱/技能/属性）
+  - id: rich_father_in_law
+    name: 隐藏富豪/大佬岳父
+    desc: 关键人物身份揭晓为顶级大佬
+  - id: business_takedown
+    name: 商战碾压
+    desc: 在商业竞争中以信息差或资本碾压对手
+  - id: celebrity_rise
+    name: 娱乐圈一夜成名
+    desc: 一首歌 / 一部戏定鼎地位
+  - id: classroom_humiliation
+    name: 校园 / 同学会打脸
+    desc: 旧识聚会现身碾压
+  - id: campus_bully
+    name: 校园霸凌反击
+    desc: 反击施暴者，伸张正义
+  - id: street_lottery
+    name: 路边奇遇 / 中奖
+    desc: 偶然事件改变人生轨迹
+  - id: family_inheritance
+    name: 家族继承权之争
+    desc: 围绕家产/集团的内斗
+  - id: showoff_invitation
+    name: 装逼名场面 - 被邀请进顶级局
+    desc: 被普通人忽略的主角被高层亲自相邀
+  - id: secret_save_lover
+    name: 暗中守护爱人
+    desc: 主角默默资助/解决爱人困境，最后揭晓
+  - id: dark_past_revenge
+    name: 旧仇复仇
+    desc: 围绕前世仇人或现实仇人的清算
+
+anti_patterns:
+  - 反派智商持续在线零只为打脸
+  - 主角动不动就报数字（资产装逼公式化）
+  - 信息差用尽后无新爆点
+  - 频繁切换视角导致读者跟不上

@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>{{ analysis.meta.title }} · novel-lab 拆解报告</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --surface: #161b22;
+    --surface2: #1f2630;
+    --border: #2a313c;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #f59e0b;
+    --good: #3fb950;
+    --warn: #f59e0b;
+    --bad: #f85149;
+    --line-main: #58a6ff;
+    --line-eco: #3fb950;
+    --line-pow: #d2a8ff;
+    --line-emo: #ff7b72;
+    --line-sub: #8b949e;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",PingFang SC,Microsoft YaHei,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { padding:24px 32px; border-bottom:1px solid var(--border);
+           display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;
+           background:linear-gradient(180deg,#1a2332 0%,var(--surface) 100%); }
+  h1 { margin:0; font-size:22px; }
+  .sub { color:var(--muted); font-size:13px; margin-top:6px;}
+  nav { display:flex; gap:6px; flex-wrap:wrap; padding:0 32px; background:var(--surface);
+        border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10;}
+  nav a { padding:14px 12px; color:var(--muted); text-decoration:none; font-size:14px; cursor:pointer;
+          border-bottom:2px solid transparent; }
+  nav a.active, nav a:hover { color:var(--text); border-color:var(--accent); }
+  main { padding:24px 32px; max-width:1400px; margin:0 auto; }
+  section { display:none; }
+  section.active { display:block; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px;
+          margin-bottom:20px; }
+  .grid { display:grid; gap:16px; }
+  .grid-3 { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+  .grid-2 { grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); }
+  .metric { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:18px; }
+  .metric .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:1px;}
+  .metric .value { font-size:30px; font-weight:600; margin-top:8px; }
+  .metric .value.good { color:var(--good); }
+  .metric .value.warn { color:var(--warn); }
+  .metric .value.bad { color:var(--bad); }
+  .chart { width:100%; height:360px; }
+  .chart-tall { height:520px; }
+  .chip { display:inline-block; background:var(--surface2); border:1px solid var(--border);
+          padding:3px 10px; border-radius:14px; font-size:12px; margin-right:6px; margin-bottom:4px; color:var(--muted); }
+  .pill-good { background:rgba(63,185,80,.18); color:var(--good); border:1px solid rgba(63,185,80,.3); }
+  .pill-warn { background:rgba(245,158,11,.18); color:var(--warn); border:1px solid rgba(245,158,11,.3); }
+  .pill-bad  { background:rgba(248,81,73,.18); color:var(--bad);  border:1px solid rgba(248,81,73,.3); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; }
+  blockquote { margin:0; padding:10px 16px; background:var(--surface2); border-left:3px solid var(--accent);
+               border-radius:4px; color:#cbd5e1; }
+  .mini { color:var(--muted); font-size:12px; }
+  details > summary { cursor:pointer; padding:8px 0; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:8px; font-size:12px; color:var(--muted); }
+  .swatch { display:inline-block; width:14px; height:14px; border-radius:3px; margin-right:4px; vertical-align:middle; }
+  .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 10px; cursor:pointer; }
+  .btn:hover { border-color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>{{ analysis.meta.title }}</h1>
+    <div class="sub">
+      novel-lab · {{ analysis.meta.genre }} · {{ analysis.meta.total_chapters }} 章 ·
+      {{ "{:,}".format(analysis.meta.total_chars) }} 字 ·
+      运行 {{ "%.1fs"|format(analysis.runtime_seconds) }} ·
+      花费 ${{ "%.4f"|format(analysis.cost_usd_total) }}
+    </div>
+  </div>
+  <div class="grid grid-3" style="gap:8px;">
+    <div class="metric"><div class="label">爽点高峰间隔</div>
+      <div class="value {% if analysis.pacing.avg_peak_interval_chapters and analysis.pacing.avg_peak_interval_chapters <= 2.5 %}good{% elif analysis.pacing.avg_peak_interval_chapters <= 4 %}warn{% else %}bad{% endif %}">
+        {{ "%.1f"|format(analysis.pacing.avg_peak_interval_chapters or 0) }} 章
+      </div>
+      <div class="mini">top10% 基线 1.8 章</div>
+    </div>
+    <div class="metric"><div class="label">差异化得分</div>
+      <div class="value {% if analysis.metrics.get('differentiation_score',0) > 0.6 %}good{% elif analysis.metrics.get('differentiation_score',0) > 0.3 %}warn{% else %}bad{% endif %}">
+        {{ "%.0f"|format(analysis.metrics.get('differentiation_score',0)*100) }}
+      </div>
+      <div class="mini">{{ analysis.differentiation|length }} 条差异点</div>
+    </div>
+    <div class="metric"><div class="label">弃书风险</div>
+      <div class="value {% if analysis.drop_risks|length == 0 %}good{% elif analysis.drop_risks|length < 4 %}warn{% else %}bad{% endif %}">
+        {{ analysis.drop_risks|length }}
+      </div>
+      <div class="mini">+ pacing 自动识别 {{ analysis.metrics.get('computed_drop_zones',0) }} 段</div>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <a data-tab="overview" class="active">概览</a>
+  <a data-tab="pacing">爽点节奏</a>
+  <a data-tab="plotlines">主线 / 暗线</a>
+  <a data-tab="characters">人物档案</a>
+  <a data-tab="graph">关系图谱</a>
+  <a data-tab="insights">深度洞察</a>
+  <a data-tab="quotes">金句 + 套路</a>
+  <a data-tab="raw">原始数据</a>
+</nav>
+
+<main>
+
+<!-- ============== overview ============== -->
+<section id="overview" class="active">
+  <div class="grid grid-3">
+    <div class="metric"><div class="label">追踪人物</div><div class="value">{{ analysis.characters|length }}</div></div>
+    <div class="metric"><div class="label">主线事件</div><div class="value">{{ analysis.metrics.get('main_plot_events',0) }}</div></div>
+    <div class="metric"><div class="label">情节线总数</div><div class="value">{{ analysis.plotlines|length }}</div></div>
+    <div class="metric"><div class="label">每章小爽点</div><div class="value">{{ "%.1f"|format(analysis.pacing.small_hook_per_chapter or 0) }}</div></div>
+    <div class="metric"><div class="label">大高潮</div><div class="value">{{ analysis.pacing.big_climax_chapters|length }}</div></div>
+    <div class="metric"><div class="label">读者爽点公式</div><div class="value">{{ analysis.reader_hooks|length }}</div></div>
+  </div>
+
+  <div class="card">
+    <h3>差异化亮点（按重要性）</h3>
+    {% if analysis.differentiation %}
+      <table>
+        <tr><th>维度</th><th>差异点</th><th>为何起效</th><th>章节</th><th>置信</th></tr>
+        {% for d in analysis.differentiation %}
+        <tr>
+          <td><span class="chip">{{ d.aspect }}</span></td>
+          <td>{{ d.description }}</td>
+          <td class="mini">{{ d.why_works }}</td>
+          <td class="mini">{{ d.evidence_chapter[:4] }}</td>
+          <td>{{ "%.2f"|format(d.confidence) }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    {% else %}<p class="mini">未识别到显著差异化亮点。</p>{% endif %}
+  </div>
+
+  <div class="card">
+    <h3>读者爽点公式（可被下游 AI 复用）</h3>
+    {% if analysis.reader_hooks %}
+      {% for h in analysis.reader_hooks %}
+      <details>
+        <summary><b>{{ h.hook_pattern }}</b> · <span class="chip">{{ h.psychological_mechanism }}</span></summary>
+        <p class="mini">典型章节：{{ h.typical_chapters[:8] }}</p>
+      </details>
+      {% endfor %}
+    {% else %}<p class="mini">无。</p>{% endif %}
+  </div>
+</section>
+
+<!-- ============== pacing ============== -->
+<section id="pacing">
+  <div class="card">
+    <h3>爽点强度曲线</h3>
+    <p class="mini">每章 max(intensity)；红色背景 = 弃书风险区段；星标 = intensity 5 大爽点。超长篇自动聚合并支持缩放。目标：每 1.8 章一峰。</p>
+    <div id="pacingChart" class="chart chart-tall"></div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>钩子类型分布</h3>
+      <div id="hookTypeChart" class="chart"></div>
+    </div>
+    <div class="card">
+      <h3>弃书风险区段</h3>
+      <table>
+        <tr><th>区段</th><th>原因</th><th>严重</th></tr>
+        {% for r in analysis.drop_risks %}
+        <tr>
+          <td>ch{{ r.chapter_range[0] }}-{{ r.chapter_range[1] }}</td>
+          <td>{{ r.reason }}<br><span class="mini">→ {{ r.suggestion }}</span></td>
+          <td><span class="chip pill-{{ 'bad' if r.severity >= 4 else 'warn' if r.severity >= 2 else 'good' }}">{{ r.severity }}</span></td>
+        </tr>
+        {% endfor %}
+        {% if not analysis.drop_risks %}
+          <tr><td colspan="3" class="mini">未识别风险。</td></tr>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============== plotlines ============== -->
+<section id="plotlines">
+  <div class="card">
+    <h3>主线 / 暗线时间轴</h3>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--line-main)"></span>主线</span>
+      <span><span class="swatch" style="background:var(--line-eco)"></span>经济暗线</span>
+      <span><span class="swatch" style="background:var(--line-pow)"></span>权力暗线</span>
+      <span><span class="swatch" style="background:var(--line-emo)"></span>情感暗线</span>
+      <span><span class="swatch" style="background:var(--line-sub)"></span>副线</span>
+    </div>
+    <div id="plotTimeline" style="width:100%;min-height:560px;"></div>
+  </div>
+
+  <div class="card">
+    <h3>长篇智能体总结（分线）</h3>
+    {% set briefs = analysis.metrics.get('line_briefs_llm', analysis.metrics.get('longform_briefs', [])) %}
+    {% if briefs %}
+      {% for b in briefs %}
+      <details>
+        <summary><b>{{ b.name }}</b> · <span class="chip">{{ b.line }}</span></summary>
+        <p class="mini">{{ b.deep_summary }}</p>
+        {% if b.phases %}
+        <table>
+          <tr><th>阶段</th><th>章节</th><th>焦点</th></tr>
+          {% for p in b.phases %}
+          <tr>
+            <td><span class="chip">{{ p.phase }}</span></td>
+            <td class="mini">ch{{ p.chapter_range[0] }}-{{ p.chapter_range[1] }}</td>
+            <td>{{ p.focus }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% endif %}
+        <table>
+          <tr><th>ch</th><th>里程碑</th></tr>
+          {% for m in b.milestones %}
+          <tr><td>{{ m.chapter_idx }}</td><td><b>{{ m.title }}</b><br><span class="mini">{{ m.summary }}</span></td></tr>
+          {% endfor %}
+        </table>
+      </details>
+      {% endfor %}
+    {% else %}
+      <p class="mini">暂无长篇总结。</p>
+    {% endif %}
+  </div>
+
+  <div class="grid grid-2">
+    {% for line in analysis.plotlines %}
+    <div class="card">
+      <h3>
+        <span class="chip">{{ line.line.value if line.line.value is defined else line.line }}</span>
+        {{ line.name }}
+      </h3>
+      <p>{{ line.summary }}</p>
+      <table>
+        <tr><th>ch</th><th>事件</th></tr>
+        {% for e in line.events %}
+        <tr><td>{{ e.chapter_idx }}</td><td><b>{{ e.title }}</b><br><span class="mini">{{ e.summary }}</span></td></tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ============== characters ============== -->
+<section id="characters">
+  {% for c in analysis.characters %}
+  <div class="card">
+    <h3>{{ c.name }} <span class="chip">{{ c.role }}</span></h3>
+    <p>{{ c.one_liner }}</p>
+    <p class="mini">动机：{{ c.motivation }} ｜ 缺陷：{{ c.flaws|join("、") }}</p>
+    <h4>弧光 5 状态点</h4>
+    <table>
+      <tr><th>阶段</th><th>章节</th><th>状态</th><th>心理变化</th></tr>
+      {% for p in c.arc %}
+      <tr><td><span class="chip">{{ p.stage }}</span></td>
+          <td>ch{{ p.chapter_idx }}</td>
+          <td>{{ p.state_summary }}</td>
+          <td class="mini">{{ p.psychological_change }}</td></tr>
+      {% endfor %}
+    </table>
+    {% if c.relationships %}
+    <h4>关系</h4>
+    <p>
+      {% for r in c.relationships %}<span class="chip">{{ r.target }} - {{ r.type }}</span>{% endfor %}
+    </p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<!-- ============== graph ============== -->
+<section id="graph">
+  <div class="card">
+    <h3>知识图谱（人物 / 章节 / 事件 / 套路）</h3>
+    <p class="mini">已对超大图谱自动降噪抽样（优先人物关系与关键事件），可切换“隐藏章节节点”提升可读性。完整图数据仍在 graph.json。</p>
+    <div class="toolbar">
+      <button class="btn" id="btnRelayout">重新布局</button>
+      <button class="btn" id="btnToggleChapter">隐藏章节节点</button>
+      <button class="btn" id="btnResetFocus">恢复全图</button>
+    </div>
+    <p class="mini" id="graphFocusHint">点击任意节点可聚焦其关联邻域，再次点击空白恢复全图。</p>
+    <div id="cy" style="width:100%; height:680px; background:#0a0d12; border-radius:6px;"></div>
+  </div>
+</section>
+
+<!-- ============== insights ============== -->
+<section id="insights">
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>差异化亮点</h3>
+      {% if analysis.differentiation %}
+        {% for d in analysis.differentiation %}
+        <details><summary><b>{{ d.aspect }}</b> — {{ d.description }}</summary>
+          <p class="mini">{{ d.why_works }}（章节 {{ d.evidence_chapter[:5] }}，置信 {{ "%.2f"|format(d.confidence) }}）</p>
+        </details>
+        {% endfor %}
+      {% else %}
+        <p class="mini">暂无差异化亮点。</p>
+      {% endif %}
+    </div>
+    <div class="card">
+      <h3>读者爽点心理归因</h3>
+      {% if analysis.reader_hooks %}
+        {% for h in analysis.reader_hooks %}
+        <details><summary><b>{{ h.hook_pattern }}</b> · {{ h.psychological_mechanism }}</summary>
+          <p class="mini">章节 {{ h.typical_chapters[:8] }}（置信 {{ "%.2f"|format(h.confidence) }}）</p>
+        </details>
+        {% endfor %}
+      {% else %}
+        <p class="mini">暂无爽点归因。</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <h3>弃书风险（含修复建议）</h3>
+    <table>
+      <tr><th>区段</th><th>原因</th><th>建议（下游 AI 创作时规避）</th><th>严重</th></tr>
+      {% for r in analysis.drop_risks %}
+      <tr><td>ch{{ r.chapter_range[0] }}-{{ r.chapter_range[1] }}</td>
+          <td>{{ r.reason }}</td>
+          <td>{{ r.suggestion }}</td>
+          <td><span class="chip pill-{{ 'bad' if r.severity >= 4 else 'warn' if r.severity >= 2 else 'good' }}">{{ r.severity }}</span></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</section>
+
+<!-- ============== quotes ============== -->
+<section id="quotes">
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>金句</h3>
+      {% for q in analysis.top_quotes[:30] %}
+      <blockquote style="margin-bottom:14px;">
+        {{ q.text }}
+        <div class="mini" style="margin-top:6px;">
+          —— {{ q.speaker or "叙述者" }}（ch{{ q.evidence_chapter[0] if q.evidence_chapter else "-" }}）·
+          {{ q.why_good }}
+        </div>
+      </blockquote>
+      {% endfor %}
+    </div>
+    <div class="card">
+      <h3>套路命中频次</h3>
+      <table>
+        <tr><th>套路</th><th>实例</th><th>章节</th></tr>
+        {% for t in analysis.top_tropes %}
+        <tr><td><span class="chip">{{ t.trope_name }}</span></td>
+            <td>{{ t.instance_summary }}</td>
+            <td class="mini">{{ t.evidence_chapter[:6] }}</td></tr>
+        {% endfor %}
+        {% if not analysis.top_tropes %}
+          <tr><td colspan="3" class="mini">暂无套路命中。</td></tr>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============== raw ============== -->
+<section id="raw">
+  <div class="card">
+    <h3>quality_gate</h3>
+    <pre style="background:var(--surface2);padding:12px;border-radius:6px;overflow-x:auto;">{{ quality_gate_json }}</pre>
+  </div>
+  <div class="card">
+    <h3>metrics.json</h3>
+    <pre style="background:var(--surface2);padding:12px;border-radius:6px;overflow-x:auto;">{{ metrics_json }}</pre>
+  </div>
+  <div class="card">
+    <h3>章节摘要</h3>
+    <table>
+      <tr><th>ch</th><th>摘要</th><th>钩子数</th></tr>
+      {% for ch in analysis.chapters[:200] %}
+      <tr><td>{{ ch.chapter_idx }}</td><td>{{ ch.summary }}</td><td>{{ ch.hooks|length }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</section>
+
+</main>
+
+<script>
+  // ====== Data ======
+  const PACING = {{ pacing_json|safe }};
+  const HOOK_TYPE_DIST = {{ hook_type_dist_json|safe }};
+  const PLOTLINES = {{ plotlines_json|safe }};
+  const TOTAL_CHAPTERS = {{ analysis.meta.total_chapters }};
+  const GRAPH_ELEMENTS = {{ graph_elements_json|safe }};
+  const DROP_ZONES = {{ drop_zones_json|safe }};
+  let pacingChart = null;
+  let hookTypeChart = null;
+  let timelineChart = null;
+  let cy = null;
+  let chapterHidden = false;
+  let focusedNodeId = null;
+
+  function renderPacingChart() {
+    if (!document.getElementById('pacingChart')) return;
+    if (!pacingChart) pacingChart = echarts.init(document.getElementById('pacingChart'), 'dark');
+    const xs = PACING.map(p => p.chapter_idx);
+    const ys = PACING.map(p => p.intensity);
+    const points = PACING.map((p, i) => [p.chapter_idx, ys[i], p.chapter_start, p.chapter_end, p.count]);
+    const peakChapters = PACING.filter(p => p.intensity >= 5).map(p => p.chapter_idx);
+    const markAreas = DROP_ZONES.map(z => [{ xAxis: z.start_chapter }, { xAxis: z.end_chapter }]);
+    pacingChart.setOption({
+      backgroundColor: 'transparent',
+      animation: false,
+      grid: { left: 56, right: 34, top: 30, bottom: 82 },
+      xAxis: {
+        type: 'value',
+        min: Math.min(...xs, 0),
+        max: Math.max(...xs, 0),
+        name: '章节序号',
+        axisLabel: { color: '#8b949e' },
+        axisLine: { lineStyle: { color: '#8b949e' } },
+      },
+      yAxis: {
+        type: 'value',
+        name: '强度 (0-5)',
+        max: 5,
+        min: 0,
+        axisLabel: { color: '#8b949e' },
+        axisLine: { lineStyle: { color: '#8b949e' } },
+      },
+      tooltip: {
+        trigger: 'axis',
+        formatter: (items) => {
+          const item = items && items[0] ? items[0] : null;
+          if (!item || !item.data) return '';
+          const [ch, val, start, end, cnt] = item.data;
+          const range = start === end ? `ch${ch}` : `ch${start}-${end}`;
+          const bucketInfo = cnt > 1 ? `（聚合 ${cnt} 章）` : '';
+          return `${range}${bucketInfo}<br/>强度：${Number(val).toFixed(2)}`;
+        }
+      },
+      dataZoom: [
+        { type: 'inside', xAxisIndex: 0 },
+        { type: 'slider', xAxisIndex: 0, height: 20, bottom: 24 }
+      ],
+      series: [{
+        type: 'line',
+        data: points,
+        smooth: PACING.length < 180,
+        showSymbol: PACING.length < 120,
+        symbolSize: (val) => val[1] >= 4.5 ? 8 : 3,
+        lineStyle: { width: 2, color: '#58a6ff' },
+        areaStyle: { color: 'rgba(88,166,255,0.13)' },
+        markPoint: {
+          data: peakChapters.map(c => ({ xAxis: c, yAxis: 5, value: '★', itemStyle: { color: '#f59e0b' } }))
+        },
+        markArea: {
+          itemStyle: { color: 'rgba(248,81,73,0.16)' },
+          data: markAreas
+        }
+      }]
+    }, true);
+    pacingChart.resize();
+  }
+
+  function renderHookTypeChart() {
+    if (!document.getElementById('hookTypeChart')) return;
+    const data = Object.entries(HOOK_TYPE_DIST).map(([k, v]) => ({ name: k, value: v }));
+    if (!data.length) return;
+    if (!hookTypeChart) hookTypeChart = echarts.init(document.getElementById('hookTypeChart'), 'dark');
+    hookTypeChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'item' },
+      legend: { type: 'scroll', bottom: 0, textStyle: { color: '#8b949e' } },
+      series: [{
+        type: 'pie',
+        radius: ['35%', '72%'],
+        center: ['50%', '44%'],
+        minAngle: 3,
+        label: { color: '#e6edf3' },
+        data: data
+      }]
+    }, true);
+    hookTypeChart.resize();
+  }
+
+  function renderTimelineChart() {
+    if (!document.getElementById('plotTimeline')) return;
+    if (!timelineChart) timelineChart = echarts.init(document.getElementById('plotTimeline'), 'dark');
+    const lines = ['main', 'economic', 'power', 'emotional', 'sub']
+      .filter(k => PLOTLINES.some(p => p.line === k));
+    const colorMap = { main: '#58a6ff', economic: '#3fb950', power: '#d2a8ff', emotional: '#ff7b72', sub: '#8b949e' };
+    const points = [];
+    PLOTLINES.forEach(line => {
+      const idx = lines.indexOf(line.line);
+      if (idx < 0) return;
+      (line.events || []).forEach(e => {
+        points.push({
+          value: [e.chapter_idx, idx, line.line, line.name, e.title, e.summary],
+          itemStyle: { color: colorMap[line.line] || '#58a6ff' },
+          symbolSize: line.line === 'main' ? 11 : 8
+        });
+      });
+    });
+    timelineChart.setOption({
+      backgroundColor: 'transparent',
+      animation: false,
+      grid: { left: 90, right: 28, top: 20, bottom: 76 },
+      xAxis: {
+        type: 'value',
+        min: 0,
+        max: Math.max(TOTAL_CHAPTERS, 10),
+        name: '章节',
+        axisLabel: { color: '#8b949e' },
+        axisLine: { lineStyle: { color: '#8b949e' } },
+      },
+      yAxis: {
+        type: 'category',
+        data: lines,
+        axisLabel: { color: '#c9d1d9' },
+        axisLine: { lineStyle: { color: '#8b949e' } },
+      },
+      tooltip: {
+        formatter: (p) => {
+          const v = p.value || [];
+          return `<b>${v[3]}</b> · ch${v[0]}<br/>${v[4]}<br/><span style="color:#8b949e">${v[5] || ''}</span>`;
+        }
+      },
+      dataZoom: [
+        { type: 'inside', xAxisIndex: 0 },
+        { type: 'slider', xAxisIndex: 0, height: 18, bottom: 20 }
+      ],
+      series: [{
+        type: 'scatter',
+        data: points,
+        encode: { x: 0, y: 1 },
+      }]
+    }, true);
+    timelineChart.resize();
+  }
+
+  function renderGraph() {
+    if (!document.getElementById('cy')) return;
+    if (!cy) {
+      cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: GRAPH_ELEMENTS,
+        style: [
+          { selector: 'node', style: {
+            'label': 'data(name)', 'color': '#e6edf3', 'font-size': 11,
+            'text-outline-width': 1, 'text-outline-color': '#0a0d12',
+            'background-color': '#58a6ff', 'width': 18, 'height': 18
+          }},
+          { selector: 'node[label = "Character"]', style: { 'background-color': '#f59e0b', 'shape': 'ellipse', 'width': 30, 'height': 30 } },
+          { selector: 'node[label = "Chapter"]', style: { 'background-color': '#30363d', 'shape': 'rectangle', 'width': 14, 'height': 14 } },
+          { selector: 'node[label = "Event"]', style: { 'background-color': '#3fb950' } },
+          { selector: 'node[label = "Trope"]', style: { 'background-color': '#d2a8ff', 'shape': 'diamond' } },
+          { selector: 'node[label = "Quote"]', style: { 'background-color': '#ff7b72', 'shape': 'star' } },
+          { selector: 'node[label = "Location"]', style: { 'background-color': '#79c0ff', 'shape': 'triangle' } },
+          { selector: 'node[label = "Book"]', style: { 'background-color': '#a371f7', 'width': 36, 'height': 36 } },
+          { selector: 'edge', style: {
+            'width': 1, 'line-color': '#30363d', 'target-arrow-color': '#30363d',
+            'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'arrow-scale': 0.6, 'opacity': 0.6
+          }},
+          { selector: 'edge[label = "RELATIONSHIP_WITH"]', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', 'width': 2 } },
+          { selector: '.dimmed', style: { 'opacity': 0.06, 'text-opacity': 0.05 } },
+        ],
+        layout: { name: 'cose', animate: false, idealEdgeLength: 88, nodeRepulsion: 8500, randomize: false }
+      });
+      cy.on('tap', 'node', (evt) => {
+        focusNeighborhood(evt.target);
+      });
+      cy.on('tap', (evt) => {
+        if (evt.target === cy) resetNeighborhoodFocus();
+      });
+    }
+    cy.resize();
+    cy.fit(undefined, 30);
+  }
+
+  function focusNeighborhood(node) {
+    if (!cy || !node) return;
+    if (focusedNodeId === node.id()) {
+      resetNeighborhoodFocus();
+      return;
+    }
+    focusedNodeId = node.id();
+    const keep = node.closedNeighborhood();
+    cy.elements().addClass('dimmed');
+    keep.removeClass('dimmed');
+    const hint = document.getElementById('graphFocusHint');
+    if (hint) hint.textContent = `已聚焦：${node.data('name') || node.id()}（展示该节点及直接关联）`;
+    cy.fit(keep, 80);
+  }
+
+  function resetNeighborhoodFocus() {
+    if (!cy) return;
+    focusedNodeId = null;
+    cy.elements().removeClass('dimmed');
+    const hint = document.getElementById('graphFocusHint');
+    if (hint) hint.textContent = '点击任意节点可聚焦其关联邻域，再次点击空白恢复全图。';
+    cy.fit(undefined, 30);
+  }
+
+  document.getElementById('btnRelayout')?.addEventListener('click', () => {
+    if (!cy) return;
+    cy.layout({ name: 'cose', animate: 'end', idealEdgeLength: 90, nodeRepulsion: 9000 }).run();
+  });
+  document.getElementById('btnToggleChapter')?.addEventListener('click', (e) => {
+    if (!cy) return;
+    chapterHidden = !chapterHidden;
+    const btn = e.target;
+    cy.nodes('[label = "Chapter"]').style('display', chapterHidden ? 'none' : 'element');
+    cy.edges().forEach(edge => {
+      const s = edge.source().data('label');
+      const t = edge.target().data('label');
+      if (s === 'Chapter' || t === 'Chapter') {
+        edge.style('display', chapterHidden ? 'none' : 'element');
+      }
+    });
+    if (btn) btn.textContent = chapterHidden ? '显示章节节点' : '隐藏章节节点';
+    cy.fit(undefined, 30);
+  });
+  document.getElementById('btnResetFocus')?.addEventListener('click', () => {
+    resetNeighborhoodFocus();
+  });
+
+  // ====== Tab switching (lazy render to avoid hidden-tab width=0 bug) ======
+  function renderCurrentTab() {
+    const active = document.querySelector('nav a.active')?.dataset?.tab;
+    if (active === 'pacing') {
+      renderPacingChart();
+      renderHookTypeChart();
+    } else if (active === 'plotlines') {
+      renderTimelineChart();
+    } else if (active === 'graph') {
+      renderGraph();
+    }
+  }
+
+  document.querySelectorAll('nav a').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      document.querySelectorAll('nav a').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('section').forEach(x => x.classList.remove('active'));
+      a.classList.add('active');
+      document.getElementById(a.dataset.tab).classList.add('active');
+      requestAnimationFrame(renderCurrentTab);
+    });
+  });
+
+  window.addEventListener('resize', () => {
+    pacingChart && pacingChart.resize();
+    hookTypeChart && hookTypeChart.resize();
+    timelineChart && timelineChart.resize();
+    cy && cy.resize();
+  });
+
+  // default only overview; prewarm hidden charts is intentionally skipped
+</script>
+</body>
+</html>

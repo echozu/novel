@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.eggs/
+build/
+dist/
+
+# Env / secrets
+.env
+.env.local
+
+# Runtime artifacts
+.workdir/
+.neo4j/
+*.sqlite
+*.db
+*.log
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.cache/
+.chroma/

@@ -1,0 +1,43 @@
+id: generic
+name: 通用（未匹配题材时使用）
+description: |
+  通用爆款公式，适用于任何题材的兜底套路库。
+keywords: []
+
+tropes:
+  - id: hook_opening
+    name: 强钩子开篇
+    desc: 第一章在前 1000 字内抛出核心冲突或反差身份
+  - id: face_slap
+    name: 装逼打脸
+    desc: 通用打脸结构
+  - id: cliffhanger_ending
+    name: 章末钩子
+    desc: 章节最后 200 字埋下悬念或冲突
+  - id: power_growth
+    name: 能力/资源增长
+    desc: 主角阶段性获得新能力 / 资源
+  - id: ally_betrayal
+    name: 盟友背叛 / 反水
+    desc: 信任崩塌或反派归化
+  - id: love_progress
+    name: CP 进展
+    desc: 任意情感进展
+  - id: mystery_reveal
+    name: 谜题揭晓
+    desc: 长线伏笔回收
+  - id: comeback_after_loss
+    name: 跌入谷底后翻盘
+    desc: 主角受重创后强势归来
+  - id: unique_setting
+    name: 独特设定亮点
+    desc: 世界观 / 设定上的独特创新
+  - id: emotional_climax
+    name: 情感高潮
+    desc: 父子 / 兄弟 / 师徒等关系到达情感顶点
+
+anti_patterns:
+  - 主角过于完美无缺陷
+  - 长段独白 / 设定堆砌
+  - 反派降智
+  - 节奏拖沓无反馈

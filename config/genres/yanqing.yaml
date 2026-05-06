@@ -1,0 +1,63 @@
+id: yanqing
+name: 言情 / 都市情感 / 古言
+description: |
+  以情感张力为核心的爆款题材，核心爽点在 CP 互动、误会与告白、宠妻打脸。
+keywords:
+  - CP
+  - 暧昧
+  - 心动
+  - 吃醋
+  - 强吻
+  - 醋意
+  - 表白
+  - 婚约
+
+tropes:
+  - id: contract_marriage
+    name: 契约/合约婚姻
+    desc: 男女主因利益结合的婚姻
+  - id: misunderstanding
+    name: 误会与化解
+    desc: 因信息差产生误会，后被澄清
+  - id: jealousy_scene
+    name: 吃醋名场面
+    desc: 男/女主见到对方与异性互动而吃醋
+  - id: protective_dominant_lead
+    name: 强势保护
+    desc: 男主在关键时刻挡在女主身前 / 隔空护短
+  - id: confession_kiss
+    name: 表白/初吻
+    desc: 关键转折性 CP 推进
+  - id: face_slap_ex
+    name: 打脸前任/小三
+    desc: 现任 CP 与前任 / 小三 / 反派对线大获全胜
+  - id: pregnancy_reveal
+    name: 怀孕揭晓
+    desc: 怀孕事件作为大反转
+  - id: hidden_identity
+    name: 隐藏身份
+    desc: CP 一方有隐瞒身份，揭晓时高潮
+  - id: sweet_spoiling
+    name: 宠妻/宠夫日常
+    desc: 高强度甜宠日常段
+  - id: separation_reunion
+    name: 分离与重逢
+    desc: CP 因外力分开后重逢
+  - id: jealousy_third_party
+    name: 第三者搅局
+    desc: 第三者强行介入引发风波
+  - id: HE_BE_climax
+    name: 大结局 HE/BE
+    desc: 圆满或悲剧高潮
+  - id: childhood_sweethearts
+    name: 青梅竹马伏笔
+    desc: 童年关系链回收
+  - id: tragic_backstory
+    name: 黑历史/悲惨过往
+    desc: 一方身世揭露引发强情感反应
+
+anti_patterns:
+  - 误会拖太久无解
+  - 反派降智 / 单纯为虐而虐
+  - 男主过于全能令读者无代入
+  - 长段心理描写无外部冲突
