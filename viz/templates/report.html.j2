@@ -132,6 +132,33 @@
   </div>
 
   <div class="card">
+    <h3>主线/暗线连续性体检</h3>
+    {% set lc = analysis.metrics.get('line_continuity', {}) %}
+    {% set lc_lines = lc.get('lines', []) %}
+    {% if lc_lines %}
+      <p class="mini">覆盖尾段线数：{{ lc.get('tail_covered_count', 0) }} / {{ lc.get('line_count', lc_lines|length) }}。span_ratio 越高，说明该线贯穿全文越充分。</p>
+      <table>
+        <tr><th>线</th><th>事件数</th><th>覆盖区间</th><th>span_ratio</th><th>尾段覆盖</th></tr>
+        {% for row in lc_lines %}
+        <tr>
+          <td><span class="chip">{{ row.line }}</span> {{ row.name }}</td>
+          <td>{{ row.events }}</td>
+          <td class="mini">ch{{ row.start }}-{{ row.end }}</td>
+          <td>{{ "%.2f"|format(row.span_ratio) }}</td>
+          <td>
+            <span class="chip pill-{{ 'good' if row.tail_covered else 'warn' }}">
+              {{ "是" if row.tail_covered else "否" }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    {% else %}
+      <p class="mini">暂无连续性数据。</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
     <h3>差异化亮点（按重要性）</h3>
     {% if analysis.differentiation %}
       <table>
@@ -196,6 +223,7 @@
 
 <!-- ============== plotlines ============== -->
 <section id="plotlines">
+  {% set line_name_map = {'main': '主线', 'economic': '经济暗线', 'power': '权力暗线', 'emotional': '情感暗线', 'sub': '副线'} %}
   <div class="card">
     <h3>主线 / 暗线时间轴</h3>
     <div class="legend">
@@ -210,11 +238,11 @@
 
   <div class="card">
     <h3>长篇智能体总结（分线）</h3>
-    {% set briefs = analysis.metrics.get('line_briefs_llm', analysis.metrics.get('longform_briefs', [])) %}
+    {% set briefs = analysis.metrics.get('line_briefs_llm') or analysis.metrics.get('longform_briefs', []) %}
     {% if briefs %}
       {% for b in briefs %}
       <details>
-        <summary><b>{{ b.name }}</b> · <span class="chip">{{ b.line }}</span></summary>
+        <summary><b>{{ b.name }}</b> · <span class="chip">{{ line_name_map.get(b.line, b.line) }}</span></summary>
         <p class="mini">{{ b.deep_summary }}</p>
         {% if b.phases %}
         <table>
@@ -245,14 +273,32 @@
     {% for line in analysis.plotlines %}
     <div class="card">
       <h3>
-        <span class="chip">{{ line.line.value if line.line.value is defined else line.line }}</span>
+        {% set line_key = line.line.value if line.line.value is defined else line.line %}
+        <span class="chip">{{ line_name_map.get(line_key, line_key) }}</span>
         {{ line.name }}
       </h3>
       <p>{{ line.summary }}</p>
       <table>
-        <tr><th>ch</th><th>事件</th></tr>
+        <tr><th>ch</th><th>节点事件</th><th>发生了什么</th><th>造成什么变化</th></tr>
         {% for e in line.events %}
-        <tr><td>{{ e.chapter_idx }}</td><td><b>{{ e.title }}</b><br><span class="mini">{{ e.summary }}</span></td></tr>
+        <tr>
+          <td>{{ e.chapter_idx }}</td>
+          <td><b>{{ e.title }}</b></td>
+          <td>{{ e.summary }}</td>
+          <td class="mini">
+            {% if "导致" in e.summary %}
+              {{ e.summary.split("导致", 1)[1] }}
+            {% elif "使得" in e.summary %}
+              {{ e.summary.split("使得", 1)[1] }}
+            {% elif "因此" in e.summary %}
+              {{ e.summary.split("因此", 1)[1] }}
+            {% elif "从而" in e.summary %}
+              {{ e.summary.split("从而", 1)[1] }}
+            {% else %}
+              推动该线后续推进与冲突升级。
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </table>
     </div>

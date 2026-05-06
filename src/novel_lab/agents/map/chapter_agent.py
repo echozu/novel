@@ -102,7 +102,7 @@ class ChapterMapAgent:
         # 强制 chapter_idx
         data["chapter_idx"] = chapter.idx
         # 兼容 evidence_chapter 缺失：填本章
-        for sect in ("mentioned_characters", "scenes", "hooks", "quotes", "tropes"):
+        for sect in ("mentioned_characters", "scenes", "hooks", "quotes", "tropes", "line_signals"):
             for item in data.get(sect, []) or []:
                 if not item.get("evidence_chapter"):
                     item["evidence_chapter"] = [chapter.idx]
@@ -118,11 +118,17 @@ class ChapterMapAgent:
                         item["_invalid"] = True
                     elif not self._is_quote_from_chapter(text, chapter.text):
                         item["_invalid"] = True
+                if sect == "line_signals":
+                    sig_text = (item.get("snippet") or "").strip()
+                    if sig_text and not self._is_quote_from_chapter(sig_text, chapter.text):
+                        item["_invalid"] = True
 
         if "tropes" in data:
             data["tropes"] = [t for t in data["tropes"] if not t.get("_invalid")]
         if "quotes" in data:
             data["quotes"] = [q for q in data["quotes"] if not q.get("_invalid")]
+        if "line_signals" in data:
+            data["line_signals"] = [s for s in data["line_signals"] if not s.get("_invalid")]
 
         try:
             return ChapterAnalysis(**data)
@@ -191,4 +197,13 @@ class ChapterMapAgent:
         merged.hooks = merge_list(a.hooks, b.hooks, lambda h: (h.type, h.summary[:30]))
         merged.quotes = merge_list(a.quotes, b.quotes, lambda q: q.text[:30])
         merged.tropes = merge_list(a.tropes, b.tropes, lambda t: t.trope_id)
+        merged.line_signals = merge_list(
+            a.line_signals,
+            b.line_signals,
+            lambda s: (
+                s.line.value if hasattr(s.line, "value") else str(s.line),
+                s.status,
+                (s.event or "")[:30],
+            ),
+        )
         return merged

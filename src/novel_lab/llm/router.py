@@ -57,6 +57,14 @@ _TIER_MATRIX: dict[str, dict[Role, Backend]] = {
 }
 
 
+def _is_probably_placeholder_key(key: str) -> bool:
+    k = (key or "").strip().lower()
+    if not k or k == "missing":
+        return True
+    placeholder_tokens = ("xxxx", "your_", "placeholder", "replace_me", "test_key")
+    return any(t in k for t in placeholder_tokens)
+
+
 def _openai_http_timeout() -> httpx.Timeout:
     """避免 LLM 调用无限挂死（map 单章可能上下文较大，read 默认拉长）。"""
     read = float(os.getenv("OPENAI_HTTP_READ_TIMEOUT", os.getenv("OPENAI_HTTP_TIMEOUT", "360")))
@@ -191,6 +199,7 @@ class LLMRouter:
         """统一对话补全入口。messages 不含 system；system 单独传。"""
         backend = self._role_map[role]
         model = self._models[backend]
+        self._validate_backend_auth(backend)
 
         cache_payload = {
             "messages": messages,
@@ -269,6 +278,23 @@ class LLMRouter:
                 },
             )
         return resp
+
+    def _validate_backend_auth(self, backend: Backend) -> None:
+        if backend == "claude":
+            key = os.getenv("ANTHROPIC_API_KEY", "")
+            if _is_probably_placeholder_key(key):
+                raise RuntimeError(
+                    "Anthropic API key 未配置或仍是占位值；当前 tier 会调用 Claude。"
+                    "请设置 ANTHROPIC_API_KEY，或改用 --tier basic。"
+                )
+        elif backend == "deepseek":
+            key = os.getenv("DEEPSEEK_API_KEY", "")
+            if _is_probably_placeholder_key(key):
+                raise RuntimeError("DeepSeek API key 未配置或仍是占位值。")
+        elif backend == "openai":
+            key = os.getenv("OPENAI_API_KEY", "")
+            if _is_probably_placeholder_key(key):
+                raise RuntimeError("OPENAI_API_KEY 未配置或仍是占位值。")
 
     # ---------------- backend impls ----------------
 

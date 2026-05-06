@@ -125,6 +125,26 @@ class TropeHit(Evidenced):
     instance_summary: str
 
 
+class LineSignalKind(str, Enum):
+    MAIN = "main"
+    ECONOMIC = "economic"
+    POWER = "power"
+    EMOTIONAL = "emotional"
+    SUB = "sub"
+    NONE = "none"
+
+
+class ChapterLineSignal(Evidenced):
+    """章节级线路信号：为 Layer2 串线提供可引用锚点。"""
+
+    line: LineSignalKind
+    status: str = "advance"  # setup | advance | twist | payoff | cooldown
+    event: str = ""
+    impact: str = ""
+    characters: list[str] = Field(default_factory=list)
+    snippet: str = ""
+
+
 class ChapterAnalysis(BaseModel):
     """单章 Map 阶段总产出。"""
 
@@ -135,6 +155,7 @@ class ChapterAnalysis(BaseModel):
     hooks: list[Hook] = Field(default_factory=list)
     quotes: list[Quote] = Field(default_factory=list)
     tropes: list[TropeHit] = Field(default_factory=list)
+    line_signals: list[ChapterLineSignal] = Field(default_factory=list)
     raw_token_in: int = 0
     raw_token_out: int = 0
     cost_usd: float = 0.0

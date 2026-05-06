@@ -102,8 +102,34 @@ class HTMLReportBuilder:
                 )
         if "longform_briefs" not in view.metrics:
             view.metrics["longform_briefs"] = self._build_longform_briefs(view)
-        if "line_briefs_llm" not in view.metrics:
+        if "line_briefs_llm" not in view.metrics or not view.metrics.get("line_briefs_llm"):
             view.metrics["line_briefs_llm"] = view.metrics.get("longform_briefs", [])
+        if "line_continuity" not in view.metrics:
+            rows = []
+            total = max(view.meta.total_chapters, 1)
+            for line in view.plotlines:
+                events = sorted(line.events, key=lambda e: e.chapter_idx)
+                if not events:
+                    continue
+                start = events[0].chapter_idx
+                end = events[-1].chapter_idx
+                line_key = line.line.value if hasattr(line.line, "value") else str(line.line)
+                rows.append(
+                    {
+                        "line": line_key,
+                        "name": line.name,
+                        "events": len(events),
+                        "start": start,
+                        "end": end,
+                        "span_ratio": round(min(1.0, max(0, end - start) / total), 3),
+                        "tail_covered": end >= int(total * 0.75),
+                    }
+                )
+            view.metrics["line_continuity"] = {
+                "lines": rows,
+                "tail_covered_count": len([r for r in rows if r["tail_covered"]]),
+                "line_count": len(rows),
+            }
         if "quality_gate" not in view.metrics:
             view.metrics["quality_gate"] = {
                 "plotlines_ready": bool(view.plotlines and any(p.events for p in view.plotlines)),
@@ -168,12 +194,37 @@ class HTMLReportBuilder:
                             "chapter_idx": e.chapter_idx,
                             "title": e.title,
                             "summary": e.summary,
+                            "action": self._extract_action(e.summary),
+                            "impact": self._extract_impact(e.summary),
                         }
                         for e in events
                     ],
                 }
             )
         return payload
+
+    @staticmethod
+    def _extract_action(summary: str) -> str:
+        txt = (summary or "").strip()
+        if not txt:
+            return ""
+        for sep in ("导致", "使得", "因此", "从而"):
+            pos = txt.find(sep)
+            if pos > 0:
+                return txt[:pos].rstrip("，,；;。")
+        return txt[:42]
+
+    @staticmethod
+    def _extract_impact(summary: str) -> str:
+        txt = (summary or "").strip()
+        if not txt:
+            return ""
+        for sep in ("导致", "使得", "因此", "从而"):
+            pos = txt.find(sep)
+            if pos > 0:
+                tail = txt[pos:]
+                return tail[:56]
+        return "推动该线下一阶段冲突。"
 
     def _build_graph_view_elements(self, graph: GraphArtifact) -> list[dict[str, Any]]:
         nodes = graph.elements.get("nodes", [])

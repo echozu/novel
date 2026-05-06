@@ -40,6 +40,7 @@ from ..schema import (
     ChapterAnalysis,
     DifferentiationPoint,
     DropRisk,
+    PlotEvent,
     PlotLine,
     PlotLineKind,
     ReaderHookCausation,
@@ -65,6 +66,7 @@ class PipelineConfig:
     resume: bool = True
     write_neo4j: bool = False
     enable_critic: bool = True
+    enable_rag: bool = True
     book_title_override: Optional[str] = None
 
 
@@ -188,7 +190,19 @@ class Pipeline:
     async def _stage_index(self) -> None:
         if self.state.meta is None or self.state.book_dir is None:
             return
-        if os.getenv("NOVEL_LAB_SKIP_INDEX", "").lower() in ("1", "true", "yes"):
+        self.progress(
+            "index_start",
+            {
+                "rag": self.config.enable_rag,
+                "backend": os.getenv("EMBEDDING_BACKEND", "auto") or "auto",
+                "model": os.getenv("EMBEDDING_DS_MODEL", os.getenv("EMBEDDING_MODEL", "")),
+            },
+        )
+        if (not self.config.enable_rag) or os.getenv("NOVEL_LAB_SKIP_INDEX", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
             self._index = ChapterTextOnlyIndex(
                 self.state.meta, workdir=self.config.workdir
             ).build()
@@ -239,8 +253,16 @@ class Pipeline:
         if meta is None:
             return
         chapters_a = self.state.chapter_analyses
+        self.progress(
+            "reduce_start",
+            {
+                "model": self.router.model_for("reduce"),
+                "tasks": ["arc", "plotline", "style"],
+            },
+        )
 
         # 1) 节奏（纯计算，先做，便于其他 agent 引用）
+        self.progress("reduce_agent_start", {"agent": "pacing", "task": "计算爽点曲线与弃书风险"})
         pacing = PacingAnalyzer().run(chapters_a)
         self.progress("reduce_pacing", {
             "avg_peak_interval_chapters": pacing.avg_peak_interval_chapters,
@@ -248,26 +270,49 @@ class Pipeline:
         })
 
         # 2) Arc / 情节线 / 文风（并发；目标模型由 ``tier`` 决定，basic=全 DeepSeek）
-        arc_task = ArcTracker(self.router).run(meta, chapters_a)
-        plot_task = PlotlineSeparator(self.router).run(meta, chapters_a)
-        style_task = StyleFingerprint(self.router).run(meta.chapters)
+        async def run_reduce_agent(agent: str, task: str, coro):
+            self.progress("reduce_agent_start", {"agent": agent, "task": task})
+            try:
+                result = await coro
+            except Exception as exc:
+                self.progress("reduce_agent_error", {"agent": agent, "err": repr(exc)})
+                raise
+            self.progress("reduce_agent_done", {"agent": agent, "task": task})
+            return result
+
+        arc_task = run_reduce_agent(
+            "arc", "追踪人物弧光与关系变化", ArcTracker(self.router).run(meta, chapters_a)
+        )
+        plot_task = run_reduce_agent(
+            "plotline", "聚合主线/暗线/副线", PlotlineSeparator(self.router).run(meta, chapters_a)
+        )
+        style_task = run_reduce_agent(
+            "style", "抽样分析文风指纹", StyleFingerprint(self.router).run(meta.chapters)
+        )
         characters, plotlines, style = await asyncio.gather(
             arc_task, plot_task, style_task, return_exceptions=True
         )
         if isinstance(characters, BaseException):
+            err = repr(characters)
             characters = []
-            self.progress("reduce_arc_error", {"err": repr(characters)})
+            self.progress("reduce_arc_error", {"err": err})
         if isinstance(plotlines, BaseException):
+            err = repr(plotlines)
             plotlines = []
-            self.progress("reduce_plotline_error", {"err": repr(plotlines)})
+            self.progress("reduce_plotline_error", {"err": err})
         if isinstance(style, BaseException):
+            err = repr(style)
             from ..schema import StyleFingerprint as StyleSchema
             style = StyleSchema()
-            self.progress("reduce_style_error", {"err": repr(style)})
+            self.progress("reduce_style_error", {"err": err})
 
         line_briefs_llm: list[dict[str, Any]] = []
         if isinstance(plotlines, list) and plotlines:
             try:
+                self.progress(
+                    "reduce_plotline_refine_start",
+                    {"plotlines": len(plotlines), "task": "RAG 回查并复核主线/暗线连续性"},
+                )
                 refined_plotlines, line_briefs_llm = await self._refine_plotlines_with_raw_trace(
                     meta=meta,
                     chapters_a=chapters_a,
@@ -282,6 +327,10 @@ class Pipeline:
                 )
             except Exception as exc:
                 self.progress("reduce_plotline_refine_error", {"err": repr(exc)})
+        if isinstance(plotlines, list) and plotlines:
+            plotlines = self._stitch_plotline_continuity(
+                meta=meta, chapters_a=chapters_a, plotlines=plotlines
+            )
 
         # 组装中间 NovelAnalysis（无洞察）
         analysis = NovelAnalysis(
@@ -307,9 +356,33 @@ class Pipeline:
         analysis = self.state.analysis
         if analysis is None:
             return
-        diff_task = DifferentiationAgent(self.router).run(analysis)
-        hook_task = ReaderHookAgent(self.router).run(analysis)
-        risk_task = DropRiskAgent(self.router).run(analysis)
+        self.progress(
+            "insight_start",
+            {
+                "model": self.router.model_for("deep"),
+                "tasks": ["differentiation", "reader_hook", "drop_risk"],
+            },
+        )
+
+        async def run_insight_agent(agent: str, task: str, coro):
+            self.progress("insight_agent_start", {"agent": agent, "task": task})
+            try:
+                result = await coro
+            except Exception as exc:
+                self.progress("insight_agent_error", {"agent": agent, "err": repr(exc)})
+                raise
+            self.progress("insight_agent_done", {"agent": agent, "task": task})
+            return result
+
+        diff_task = run_insight_agent(
+            "differentiation", "提炼差异化亮点", DifferentiationAgent(self.router).run(analysis)
+        )
+        hook_task = run_insight_agent(
+            "reader_hook", "归因读者爽点心理机制", ReaderHookAgent(self.router).run(analysis)
+        )
+        risk_task = run_insight_agent(
+            "drop_risk", "识别弃书风险与修复建议", DropRiskAgent(self.router).run(analysis)
+        )
         diffs, hooks, risks = await asyncio.gather(
             diff_task, hook_task, risk_task, return_exceptions=True
         )
@@ -360,6 +433,10 @@ class Pipeline:
         if not claims:
             return
 
+        self.progress(
+            "critic_start",
+            {"claims": len(claims), "model": self.router.model_for("critic")},
+        )
         critic = CriticAgent(self.router, index=self._index)
         critiques = await critic.critique(claims)
         rejected = {cr.target_id for cr in critiques if not cr.pass_check}
@@ -387,6 +464,7 @@ class Pipeline:
         analysis = self.state.analysis
         if analysis is None:
             return
+        self.progress("finalize_start", {"task": "体检关键结果、抽取金句与套路、写入 analysis JSON"})
         self._quality_gate_recover(analysis)
         # 抽 top quotes / top tropes
         all_quotes: list[Quote] = []
@@ -421,6 +499,9 @@ class Pipeline:
 
         # 计算 metrics
         prev_line_briefs = analysis.metrics.get("line_briefs_llm", [])
+        longform_briefs = self._build_longform_briefs(analysis)
+        if not prev_line_briefs:
+            prev_line_briefs = longform_briefs
         n = analysis.meta.total_chapters or 1
         peaks = analysis.pacing.avg_peak_interval_chapters
         peak_score = max(0.0, min(1.0, (5.0 - peaks) / 5.0)) if peaks > 0 else 0.0
@@ -441,7 +522,8 @@ class Pipeline:
             ),
             "scale_tier": self.config.tier,
             "quality_gate": self._build_quality_gate_snapshot(analysis),
-            "longform_briefs": self._build_longform_briefs(analysis),
+            "longform_briefs": longform_briefs,
+            "line_continuity": self._build_line_continuity(analysis),
             "line_briefs_llm": prev_line_briefs,
         }
 
@@ -515,6 +597,15 @@ class Pipeline:
                         {"text": q.text[:80], "why_good": q.why_good[:60]}
                         for q in ch.quotes[:2]
                     ],
+                    "line_signals": [
+                        {
+                            "line": s.line.value if hasattr(s.line, "value") else str(s.line),
+                            "status": s.status,
+                            "event": (s.event or "")[:70],
+                            "impact": (s.impact or "")[:70],
+                        }
+                        for s in ch.line_signals[:4]
+                    ],
                     "is_key_chapter": ch.chapter_idx in key_chapter_set,
                 }
             )
@@ -537,6 +628,9 @@ class Pipeline:
             ],
             "chapter_traces": chapter_traces,
             "key_chapters": key_chapters[:200],
+            "rag_hits": self._collect_plotline_rag_hits(
+                meta=meta, draft_plotlines=draft_plotlines
+            ),
         }
 
         user = (
@@ -559,6 +653,185 @@ class Pipeline:
         )
         line_briefs = data.get("line_briefs", [])
         return (refined or draft_plotlines), (line_briefs if isinstance(line_briefs, list) else [])
+
+    def _collect_plotline_rag_hits(
+        self,
+        *,
+        meta: NovelMeta,
+        draft_plotlines: list[PlotLine],
+    ) -> list[dict[str, Any]]:
+        """向量检索关键章节，帮助 reduce-refine 连接前后段事件。"""
+        if self._index is None or not hasattr(self._index, "retrieve_with_parents"):
+            return []
+        retrieve_with_parents = getattr(self._index, "retrieve_with_parents")
+        if not callable(retrieve_with_parents):
+            return []
+
+        queries = [
+            "全书主线推进 冲突升级 反转 回收",
+            "后半段关键转折 伏笔回收 终局",
+            "人物关系逆转 阵营变化 关键代价",
+            f"{meta.title} {meta.genre} 主线关键回合",
+        ]
+        for line in draft_plotlines[:6]:
+            line_kind = line.line.value if hasattr(line.line, "value") else str(line.line)
+            queries.append(f"{line_kind}线 {line.name} 关键事件 转折 结局")
+
+        hits_out: list[dict[str, Any]] = []
+        seen_chapters: set[int] = set()
+        for query in queries:
+            try:
+                hits = retrieve_with_parents(query, top_k=4)
+            except Exception:
+                continue
+            for hit in hits:
+                chapter_idx = int(hit.get("chapter_idx", -1))
+                if chapter_idx < 0 or chapter_idx in seen_chapters:
+                    continue
+                seen_chapters.add(chapter_idx)
+                hits_out.append(
+                    {
+                        "query": query,
+                        "chapter_idx": chapter_idx,
+                        "chapter_title": hit.get("chapter_title", ""),
+                        "score": round(float(hit.get("score", 0.0)), 4),
+                        "snippet": str(hit.get("snippet", ""))[:220],
+                        "parent_excerpt": str(hit.get("parent_text", ""))[:260],
+                    }
+                )
+                if len(hits_out) >= 28:
+                    return sorted(hits_out, key=lambda x: x["chapter_idx"])
+        return sorted(hits_out, key=lambda x: x["chapter_idx"])
+
+    def _stitch_plotline_continuity(
+        self,
+        *,
+        meta: NovelMeta,
+        chapters_a: list[ChapterAnalysis],
+        plotlines: list[PlotLine],
+    ) -> list[PlotLine]:
+        """修复情节线断裂：去重、补桥接事件、补尾段回收。"""
+        if not plotlines:
+            return plotlines
+        chapters_sorted = sorted(chapters_a, key=lambda c: c.chapter_idx)
+        if not chapters_sorted:
+            return plotlines
+
+        chapter_map = {c.chapter_idx: c for c in chapters_sorted}
+        all_idxs = [c.chapter_idx for c in chapters_sorted]
+        first_quarter = max(1, int(meta.total_chapters * 0.25))
+        last_quarter_start = max(0, int(meta.total_chapters * 0.75))
+        gap_threshold = max(18, min(80, meta.total_chapters // 7))
+
+        def short_title(idx: int) -> str:
+            ch = chapter_map.get(idx)
+            base = (ch.summary if ch else f"章节 {idx}") or f"章节 {idx}"
+            return base.split("。")[0][:26] or f"章节 {idx}"
+
+        def short_summary(idx: int) -> str:
+            ch = chapter_map.get(idx)
+            return ((ch.summary if ch else "") or "")[:120]
+
+        for line in plotlines:
+            ordered = sorted(line.events, key=lambda e: e.chapter_idx)
+            dedup: dict[int, PlotEvent] = {}
+            for ev in ordered:
+                prev = dedup.get(ev.chapter_idx)
+                if prev is None or ev.confidence >= prev.confidence:
+                    dedup[ev.chapter_idx] = ev
+            line.events = [dedup[k] for k in sorted(dedup)]
+
+            # 事件跨度太大时补一个桥接节点，避免“跳章断裂”
+            patched: list[PlotEvent] = []
+            for i, ev in enumerate(line.events):
+                if i > 0:
+                    prev = line.events[i - 1]
+                    if ev.chapter_idx - prev.chapter_idx > gap_threshold:
+                        bridge_idx = (prev.chapter_idx + ev.chapter_idx) // 2
+                        patched.append(
+                            PlotEvent(
+                                chapter_idx=bridge_idx,
+                                title=f"{line.name}承接推进",
+                                summary=short_summary(bridge_idx) or f"{line.name}在中段持续发酵并转入下一阶段冲突。",
+                                line=line.line,
+                                characters=[],
+                                evidence_chapter=[bridge_idx],
+                                confidence=0.52,
+                            )
+                        )
+                patched.append(ev)
+            line.events = sorted(patched, key=lambda e: e.chapter_idx)
+
+            # 没有覆盖后 1/4 时，补一个“尾段回收”锚点
+            if line.events and max(e.chapter_idx for e in line.events) < last_quarter_start:
+                tail_idx = all_idxs[-1]
+                line.events.append(
+                    PlotEvent(
+                        chapter_idx=tail_idx,
+                        title=f"{line.name}阶段回收",
+                        summary=short_summary(tail_idx) or f"{line.name}在尾段形成结果兑现或代价清算。",
+                        line=line.line,
+                        characters=[],
+                        evidence_chapter=[tail_idx],
+                        confidence=0.5,
+                    )
+                )
+                line.events.sort(key=lambda e: e.chapter_idx)
+
+        main_line = next(
+            (
+                p
+                for p in plotlines
+                if str(p.line) == "main" or (hasattr(p.line, "value") and p.line.value == "main")
+            ),
+            None,
+        )
+        if main_line is not None and main_line.events:
+            min_idx = min(e.chapter_idx for e in main_line.events)
+            if min_idx > first_quarter:
+                head_idx = all_idxs[0]
+                main_line.events.insert(
+                    0,
+                    PlotEvent(
+                        chapter_idx=head_idx,
+                        title="主线起势",
+                        summary=short_summary(head_idx) or short_title(head_idx),
+                        line=main_line.line,
+                        characters=[],
+                        evidence_chapter=[head_idx],
+                        confidence=0.55,
+                    ),
+                )
+                main_line.events = sorted(main_line.events, key=lambda e: e.chapter_idx)
+        return plotlines
+
+    def _build_line_continuity(self, analysis: NovelAnalysis) -> dict[str, Any]:
+        total = max(analysis.meta.total_chapters, 1)
+        coverage_rows: list[dict[str, Any]] = []
+        for line in analysis.plotlines:
+            events = sorted(line.events, key=lambda e: e.chapter_idx)
+            if not events:
+                continue
+            start = events[0].chapter_idx
+            end = events[-1].chapter_idx
+            span = max(0, end - start)
+            line_key = line.line.value if hasattr(line.line, "value") else str(line.line)
+            coverage_rows.append(
+                {
+                    "line": line_key,
+                    "name": line.name,
+                    "events": len(events),
+                    "start": start,
+                    "end": end,
+                    "span_ratio": round(min(1.0, span / total), 3),
+                    "tail_covered": end >= int(total * 0.75),
+                }
+            )
+        return {
+            "lines": coverage_rows,
+            "tail_covered_count": len([r for r in coverage_rows if r["tail_covered"]]),
+            "line_count": len(coverage_rows),
+        }
 
     @staticmethod
     def _safe_json(text: str) -> dict[str, Any]:

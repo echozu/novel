@@ -2,8 +2,9 @@
 
 你将拿到：
 - 初版 `draft_plotlines`
-- Layer1 章节原始流水样本（chapter_traces，含 summary/hooks/quotes）
+- Layer1 章节原始流水样本（chapter_traces，含 summary/hooks/quotes/line_signals）
 - 关键章节索引（key_chapters）
+- RAG 召回片段（rag_hits，含 query/snippet/parent_excerpt）
 
 你的任务是做“全书复核”，避免初版 plotline 因抽样或局部上下文导致片面。
 
@@ -67,3 +68,6 @@
 - `line_briefs` 目标 4-10 条，每条必须含阶段（phases）与里程碑（milestones）。
 - milestones 优先覆盖：前段引爆点 / 中段转折点 / 后段兑现点。
 - 所有章节索引必须升序，且尽量来自输入的 key_chapters 或 chapter_traces。
+- 主线必须覆盖前 25% 与后 25% 章节区间（至少各 1 个事件），避免只讲前半段。
+- 每条线若前后事件间隔过大，必须补“承接事件”解释因果，不允许没头没尾。
+- 优先利用 `rag_hits` 把中后段关键回收事件串回来；若与 draft 冲突，以证据更强者为准。

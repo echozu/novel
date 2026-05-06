@@ -13,7 +13,7 @@
 {
   "total_chapters": int,
   "genre": "...",
-  "chapter_briefs": [{"chapter_idx": int, "summary": "...", "hooks": [...]}]
+  "chapter_briefs": [{"chapter_idx": int, "summary": "...", "hooks": [...], "line_signals": [...]}]
 }
 ```
 
@@ -43,7 +43,9 @@
 ## 关键要求
 
 - **主线必须有 ≥ 5 个 key events**，按章节升序。
+- 主线事件必须尽量覆盖前期/中期/后期，不得集中在同一段落。
 - **暗线没有就空，不要硬凑**：但请认真扫描——网文里 90% 都至少有情感暗线。
 - **intersections 是关键**：交汇点正是节奏高潮的位置，必须找出。
 - 副线（line=`sub`）：例如配角自己的小线、单元篇 boss 战，1-3 条即可。
 - **events.summary** 用动作 + 结果格式，禁止只写"主角去某地"，要写"主角在 X 地揭破了 Y 的阴谋，导致 Z"。
+- 每条线的末段尽量给出至少 1 个后期事件（若原文确实缺失可不写，但要在 summary 说明“未回收”）。

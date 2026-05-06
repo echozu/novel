@@ -58,11 +58,42 @@ cp .env.example .env
 # 3. 起 Neo4j（可选，只想要本地 JSON 图谱可跳过）
 docker compose up -d neo4j
 
-# 4. 拆解一本小说，无向量模式
+# 4. 拆解一本小说，无向量模式，继续模式
 cd /Users/zhangyu/code/project/novel
 NOVEL_LAB_SKIP_INDEX=1 .venv/bin/novel-lab analyze "/Users/zhangyu/code/project/novel/novel合集/西游记（原文版）.txt" --tier basic --genre generic --resume
+
+# 有向量模式
+cd /Users/zhangyu/code/project/novel
+export NOVEL_LAB_FORCE_REINDEX=1
+# 可选：显式声明后端（你已有 DASHSCOPE_API_KEY 时不写也会自动走 dashscope）
+export EMBEDDING_BACKEND=dashscope
+.venv/bin/novel-lab analyze "/Users/zhangyu/code/project/novel/novel合集/西游记（原文版）.txt" --tier basic --genre generic --rag --resume
+
 # 5. 查看输出
 open ./.workdir/<book_id>/output_pack/report.html
+```
+
+### 完整重跑同一本书（不沿用旧 map / 旧报告）
+
+同一 txt 的路径与内容哈希固定 → **永远落在 `.workdir/<book_id>/`**。继续用 **`--resume`** 时，会读取 **`checkpoints/map.sqlite`**，所以会误以为「和以前同一条命令、没重头跑」。可选：
+
+```bash
+cd /Users/zhangyu/code/project/novel
+
+# 推荐：删掉该书整条工作目录（map / checkpoints / chroma / output_pack 全清）
+rm -rf .workdir/book_<该书book_id>   # book_id：ls .workdir/ 或对应该书的 meta.json / 上轮日志
+
+# 无向量 + 不重读 map 校验点（仍会写回 map.sqlite）。注意：下文 LLM 缓存。
+NOVEL_LAB_SKIP_INDEX=1 .venv/bin/novel-lab analyze "/path/to/小说.txt" --tier basic --genre generic --no-resume
+
+# 有向量 + 强制重算嵌入 + 不重读 map 校验点
+NOVEL_LAB_FORCE_REINDEX=1 EMBEDDING_BACKEND=dashscope .venv/bin/novel-lab analyze "/path/to/小说.txt" --tier balanced --genre generic --rag --no-resume
+```
+
+**全局** LLM 缓存在 `.workdir/llm_cache.sqlite`。即使用 `--no-resume`，只要 prompt 完全一致仍可能 **命中缓存、不再调用 API**。若要连模型输出都强制刷新（会影响**其他书**）：先备份再删掉该文件：
+
+```bash
+mv .workdir/llm_cache.sqlite .workdir/llm_cache.sqlite.bak
 ```
 
 ## 关键 CLI
@@ -73,6 +104,8 @@ novel-lab analyze <path>
   --tier {basic|balanced|premium|local}        # 质量/成本档位
   --sample-ratio 0.3                           # 抽样模式快速预览
   --resume                                     # 断点续跑
+  --no-resume                                  # 忽略 map 校验点，全书重跑 Map API（仍可能命中 llm_cache.sqlite）
+  --rag / --no-rag                             # 启用/关闭向量检索参与主线复核
   --no-graph                                   # 不写 Neo4j（只产 graph.json）
   --max-chapters 200                           # 限制章节数（调试用）
 ```

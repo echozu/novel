@@ -66,6 +66,18 @@
       "evidence_chapter": [chapter_idx],
       "confidence": 0.0-1.0
     }
+  ],
+  "line_signals": [
+    {
+      "line": "main|economic|power|emotional|sub|none",
+      "status": "setup|advance|twist|payoff|cooldown",
+      "event": "本章该线节点发生了什么（动作）",
+      "impact": "该节点造成了什么结果/影响",
+      "characters": ["相关角色，可空"],
+      "snippet": "原文证据片段 ≤120 字（直接复制原文）",
+      "evidence_chapter": [chapter_idx],
+      "confidence": 0.0-1.0
+    }
   ]
 }
 ```
@@ -78,4 +90,6 @@
 - **quotes 宁缺毋滥**：没有真正闪光的就空数组。不要把普通对话当金句。
 - **snippet 必须是原文**：不要改写、不要总结、直接复制（≤120 字截断）。
 - **没有命中的套路就空数组**，绝不硬凑。
+- **line_signals 是后续串主线的核心锚点**：每章建议 1-4 条，优先 main/economic/power/emotional/sub，实在无推进再用 none。
+- line_signals 的 `event` 与 `impact` 必须区分清楚：前者写“发生了什么动作”，后者写“导致了什么变化”。
 - **confidence 默认 0.7**，原文证据非常清晰时 0.9+，模糊推测 0.4。

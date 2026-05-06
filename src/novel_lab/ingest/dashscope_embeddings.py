@@ -2,7 +2,7 @@
 
 需要环境变量：`DASHSCOPE_API_KEY`。
 默认端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`
-默认模型：`text-embedding-v3`（可按 `EMBEDDING_MODEL` 覆盖）。
+默认模型：`text-embedding-v4`（可按 `EMBEDDING_MODEL` 覆盖）。
 """
 
 from __future__ import annotations
@@ -37,12 +37,13 @@ class DashScopeCompatibleEmbedding(BaseEmbedding):
 
     api_key: str = Field(description="DashScope API key")
     base_url: str = Field(default="https://dashscope.aliyuncs.com/compatible-mode/v1")
-    model_name: str = Field(default="text-embedding-v3")
+    model_name: str = Field(default="text-embedding-v4")
     request_timeout_sec: float = Field(default=60.0)
     connect_timeout_sec: float = Field(default=15.0)
     max_input_chars: int = Field(
         default=6000, description="单条输入截断上限，避免超大 payload 被服务端断开"
     )
+    dimensions: int | None = Field(default=None, description="text-embedding-v4/v3 可选向量维度")
     _httpx_client: Any = PrivateAttr(default=None)
 
     # ---------------- core ----------------
@@ -77,7 +78,13 @@ class DashScopeCompatibleEmbedding(BaseEmbedding):
         self, url: str, headers: dict[str, str], payload: dict[str, Any]
     ) -> dict[str, Any]:
         r = self._get_httpx().post(url, headers=headers, json=payload)
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text[:1000]
+            raise RuntimeError(
+                f"DashScope embeddings HTTP {exc.response.status_code}: {body}"
+            ) from exc
         return r.json()
 
     def _embed_many(self, texts: list[str]) -> list[list[float]]:
@@ -88,7 +95,9 @@ class DashScopeCompatibleEmbedding(BaseEmbedding):
             "Content-Type": "application/json",
         }
         truncated = [self._truncate(t) for t in texts]
-        payload = {"model": self.model_name, "input": truncated, "encoding_format": "float"}
+        payload: dict[str, Any] = {"model": self.model_name, "input": truncated}
+        if self.dimensions:
+            payload["dimensions"] = self.dimensions
         data = self._post_embeddings_json(url, headers, payload)
         rows = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
         outs: list[list[float]] = []
@@ -138,12 +147,15 @@ def build_embeddings_from_env() -> BaseEmbedding:
             ),
             model_name=os.getenv(
                 "EMBEDDING_DS_MODEL",
-                os.getenv("EMBEDDING_MODEL", "text-embedding-v3"),
+                os.getenv("EMBEDDING_MODEL", "text-embedding-v4"),
             ),
             request_timeout_sec=float(os.getenv("DASHSCOPE_EMBED_TIMEOUT", "180")),
             connect_timeout_sec=float(os.getenv("DASHSCOPE_EMBED_CONNECT_TIMEOUT", "15")),
             max_input_chars=int(os.getenv("DASHSCOPE_EMBED_MAX_CHARS", "6000")),
-            embed_batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "16")),
+            dimensions=(
+                int(os.getenv("EMBEDDING_DIMENSIONS", "0")) or None
+            ),
+            embed_batch_size=min(int(os.getenv("EMBEDDING_BATCH_SIZE", "10")), 10),
         )
 
     from llama_index.embeddings.huggingface import HuggingFaceEmbedding

@@ -33,7 +33,23 @@ def _briefs(items: list[ChapterAnalysis]) -> list[dict]:
              "summary": h.summary[:60]}
             for h in ch.hooks
         ]
-        out.append({"chapter_idx": ch.chapter_idx, "summary": ch.summary, "hooks": hooks_brief})
+        line_signals = [
+            {
+                "line": s.line.value if hasattr(s.line, "value") else str(s.line),
+                "status": s.status,
+                "event": (s.event or "")[:72],
+                "impact": (s.impact or "")[:72],
+            }
+            for s in (ch.line_signals or [])
+        ]
+        out.append(
+            {
+                "chapter_idx": ch.chapter_idx,
+                "summary": ch.summary,
+                "hooks": hooks_brief,
+                "line_signals": line_signals,
+            }
+        )
     return out
 
 
